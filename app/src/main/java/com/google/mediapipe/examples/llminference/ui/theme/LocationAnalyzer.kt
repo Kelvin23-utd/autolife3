@@ -81,7 +81,6 @@ object LlmManager {
                 val options = LlmInference.LlmInferenceOptions.builder()
                     .setModelPath("/data/local/tmp/llm/gemma-2b-it-gpu-int4.bin")
                     .setMaxTokens(1024)
-                    .setMaxTopK(20)  // Changed from setTopK to setMaxTopK
                     .build()
 
                 llmInstance = LlmInference.createFromOptions(context, options)

@@ -14,49 +14,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.mediapipe.examples.llminference.server.OllamaClient
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import com.google.mediapipe.examples.llminference.ui.theme.front.AppNavigation
 import kotlinx.coroutines.launch
-
-// ViewModel
-class MainViewModel : ViewModel() {
-    private val _chatResponse = MutableStateFlow<String?>(null)
-    val chatResponse = _chatResponse.asStateFlow()
-
-    // Initialize OllamaClient with your server's base URL
-    private val ollamaClient = OllamaClient("http://localhost:11434")  // Use 10.0.2.2 for Android Emulator
-    // For physical device, use your computer's local IP address, e.g.:
-    // private val ollamaClient = OllamaClient("http://192.168.1.100:11434")
-
-    fun sendMessage(message: String) {
-        viewModelScope.launch {
-            try {
-                _chatResponse.value = "Loading..."
-                val response = ollamaClient.chat(
-                    model = "deepseek-r1:1.5b",  // or your preferred model
-                    message = message
-                )
-
-                _chatResponse.value = when {
-                    response.isSuccess -> response.getOrNull()?.message?.content ?: "Empty response"
-                    else -> "Error: ${response.exceptionOrNull()?.message}"
-                }
-            } catch (e: Exception) {
-                _chatResponse.value = "Error: ${e.message}"
-            }
-        }
-    }
-}
-
-@Composable
-fun rememberMainViewModel(): MainViewModel {
-    return viewModel()
-}
 
 class MainActivity : ComponentActivity() {
     init {
@@ -91,7 +51,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                MainScreen()
+                AppNavigation()
             }
         }
     }
@@ -99,199 +59,122 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    onNavigateToTests: () -> Unit = {}
+) {
     val context = LocalContext.current
-    val viewModel = rememberMainViewModel()
     var currentAnalysis by remember { mutableStateOf<String?>(null) }
     var currentPhase by remember { mutableStateOf(SequentialMotionLocationAnalyzer.AnalysisPhase.NONE) }
     var isAnalyzing by remember { mutableStateOf(false) }
-    var isFusing by remember { mutableStateOf(false) }
-    var fusionResult by remember { mutableStateOf<String?>(null) }
     var memoryInfo by remember { mutableStateOf(MemoryMonitor.getMemoryInfo()) }
 
     val analyzer = remember { SequentialMotionLocationAnalyzer(context) }
-    val fusionAnalyzer = remember { ContextFusionAnalyzer(context) }
     val scope = rememberCoroutineScope()
-    val chatResponse = viewModel.chatResponse.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Fixed content section
-        Column(
+        // Navigation section
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(16.dp)
         ) {
-            // Memory Monitor
-            MemoryMonitorCard(memoryInfo = memoryInfo)
-
-            // Sequential Analysis Card
-            Card(
-                modifier = Modifier.fillMaxWidth()
+            Button(
+                onClick = onNavigateToTests,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("Sequential Analysis", style = MaterialTheme.typography.titleMedium)
+                Text("Go to Test Functions")
+            }
+        }
 
-                    Button(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            if (!isAnalyzing) {
-                                isAnalyzing = true
-                                scope.launch {
-                                    memoryInfo = MemoryMonitor.getMemoryInfo()
-                                    analyzer.startAnalysis { result, phase ->
-                                        currentAnalysis = result
-                                        currentPhase = phase
-                                        scope.launch {
-                                            memoryInfo = MemoryMonitor.getMemoryInfo()
-                                        }
-                                        if (phase == SequentialMotionLocationAnalyzer.AnalysisPhase.COMPLETE) {
-                                            isAnalyzing = false
-                                        }
+        // Memory Monitor
+        MemoryMonitorCard(
+            memoryInfo = memoryInfo,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Sequential Analysis Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Sequential Analysis", style = MaterialTheme.typography.titleMedium)
+
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        if (!isAnalyzing) {
+                            isAnalyzing = true
+                            scope.launch {
+                                memoryInfo = MemoryMonitor.getMemoryInfo()
+                                analyzer.startAnalysis { result, phase ->
+                                    currentAnalysis = result
+                                    currentPhase = phase
+                                    scope.launch {
+                                        memoryInfo = MemoryMonitor.getMemoryInfo()
+                                    }
+                                    if (phase == SequentialMotionLocationAnalyzer.AnalysisPhase.COMPLETE) {
+                                        isAnalyzing = false
                                     }
                                 }
-                            } else {
-                                analyzer.stopAnalysis()
-                                isAnalyzing = false
                             }
+                        } else {
+                            analyzer.stopAnalysis()
+                            isAnalyzing = false
                         }
-                    ) {
-                        Text(
-                            when(currentPhase) {
-                                SequentialMotionLocationAnalyzer.AnalysisPhase.MOTION -> "Motion Detection in Progress..."
-                                SequentialMotionLocationAnalyzer.AnalysisPhase.LOCATION -> "Location Analysis in Progress..."
-                                SequentialMotionLocationAnalyzer.AnalysisPhase.COMPLETE -> "Analysis Complete"
-                                else -> "Start Analysis"
-                            }
-                        )
                     }
-
-                    if (isAnalyzing) {
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth(),
-                            progress = when(currentPhase) {
-                                SequentialMotionLocationAnalyzer.AnalysisPhase.MOTION -> 0.3f
-                                SequentialMotionLocationAnalyzer.AnalysisPhase.LOCATION -> 0.7f
-                                SequentialMotionLocationAnalyzer.AnalysisPhase.COMPLETE -> 1.0f
-                                else -> 0f
-                            }
-                        )
-                    }
-                }
-            }
-
-            // Fusion Test Card
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Test Context Fusion", style = MaterialTheme.typography.titleMedium)
-
-                    Button(
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isFusing,
-                        onClick = {
-                            scope.launch {
-                                isFusing = true
-                                memoryInfo = MemoryMonitor.getMemoryInfo()
-                                fusionResult = fusionAnalyzer.performFusion()
-                                memoryInfo = MemoryMonitor.getMemoryInfo()
-                                isFusing = false
-                            }
+                    Text(
+                        when(currentPhase) {
+                            SequentialMotionLocationAnalyzer.AnalysisPhase.MOTION -> "Motion Detection in Progress..."
+                            SequentialMotionLocationAnalyzer.AnalysisPhase.LOCATION -> "Location Analysis in Progress..."
+                            SequentialMotionLocationAnalyzer.AnalysisPhase.COMPLETE -> "Analysis Complete"
+                            else -> "Start Analysis"
                         }
-                    ) {
-                        Text(if (isFusing) "Fusing Contexts..." else "Test Fusion")
-                    }
-
-                    if (isFusing) {
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth(),
-                            progress = 0.5f
-                        )
-                    }
+                    )
                 }
-            }
 
-            // Ollama Test Card
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("Test Ollama API", style = MaterialTheme.typography.titleMedium)
-
-                    Button(
+                if (isAnalyzing) {
+                    LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            viewModel.sendMessage("Hello, how are you?")
+                        progress = when(currentPhase) {
+                            SequentialMotionLocationAnalyzer.AnalysisPhase.MOTION -> 0.3f
+                            SequentialMotionLocationAnalyzer.AnalysisPhase.LOCATION -> 0.7f
+                            SequentialMotionLocationAnalyzer.AnalysisPhase.COMPLETE -> 1.0f
+                            else -> 0f
                         }
-                    ) {
-                        Text("Test Ollama")
-                    }
-
-                    chatResponse.value?.let { response ->
-                        if (response == "Loading...") {
-                            LinearProgressIndicator(
-                                modifier = Modifier.fillMaxWidth(),
-                                progress = 0.5f
-                            )
-                        }
-                    }
+                    )
                 }
             }
         }
 
-        // Scrollable content section
-        Box(
+        // Results Display
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(horizontal = 16.dp)
+                .padding(16.dp)
         ) {
-            Card(
-                modifier = Modifier.fillMaxSize()
+            Box(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
-                Box(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    Column {
-                        currentAnalysis?.let {
-                            Text(
-                                text = it,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-
-                        fusionResult?.let {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Fusion Result:\n$it",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-
-                        chatResponse.value?.let { response ->
-                            if (response != "Loading...") {
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = "Ollama Response:\n$response",
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        }
-                    }
+                currentAnalysis?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
         }
@@ -299,11 +182,12 @@ fun MainScreen() {
 }
 
 @Composable
-fun MemoryMonitorCard(memoryInfo: MemoryMonitor.MemoryInfo) {
+fun MemoryMonitorCard(
+    memoryInfo: MemoryMonitor.MemoryInfo,
+    modifier: Modifier = Modifier
+) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
@@ -361,6 +245,61 @@ fun MemoryMonitorCard(memoryInfo: MemoryMonitor.MemoryInfo) {
                 text = "Total PSS: ${memoryInfo.totalPSSMB}MB",
                 style = MaterialTheme.typography.bodySmall
             )
+        }
+    }
+}
+
+// Test Functions Screen
+@Composable
+fun TestFunctionsScreen(
+    onNavigateBack: () -> Unit = {}
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Button(
+                onClick = onNavigateBack,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text("Back to Main Screen")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Add your test function buttons here
+        Card(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Test Functions", style = MaterialTheme.typography.titleMedium)
+
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { /* Add test function 1 */ }
+                ) {
+                    Text("Test Function 1")
+                }
+
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { /* Add test function 2 */ }
+                ) {
+                    Text("Test Function 2")
+                }
+
+                // Add more test function buttons as needed
+            }
         }
     }
 }
