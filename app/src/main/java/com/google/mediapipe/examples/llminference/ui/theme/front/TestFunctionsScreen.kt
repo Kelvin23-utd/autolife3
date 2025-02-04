@@ -40,7 +40,7 @@ class TestFunctionsViewModel : ViewModel() {
 
     fun initializeFusionAnalyzer(context: Context) {
         if (fusionAnalyzer == null) {
-            fusionAnalyzer = ContextFusionAnalyzer(context)
+            fusionAnalyzer = ContextFusionAnalyzer(context, viewModelScope)
         }
     }
 

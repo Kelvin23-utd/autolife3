@@ -7,6 +7,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import okhttp3.Interceptor
 import okhttp3.Response
+import java.util.concurrent.TimeUnit
 
 class TimingInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -37,6 +38,10 @@ class OllamaClient(baseUrl: String) {
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(TimingInterceptor())
         .addInterceptor(loggingInterceptor)
+        .connectTimeout(300, TimeUnit.SECONDS)    // Add explicit connect timeout
+        .writeTimeout(300, TimeUnit.SECONDS)      // Add explicit write timeout
+        .readTimeout(300, TimeUnit.SECONDS)       // Add explicit read timeout
+        .callTimeout(300, TimeUnit.SECONDS)       // Overall timeout
         .build()
 
     private val retrofit = Retrofit.Builder()

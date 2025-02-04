@@ -22,6 +22,22 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
     private var currentPhase = AnalysisPhase.NONE
     private var motionDetector: MotionDetector? = null
     private var locationAnalyzer: LocationAnalyzer? = null
+    private var llmFusionResult = ""
+    private var ollamaFusionResult = ""
+
+    // Initialize timing variables
+    private var llmStartTime = 0L
+    private var llmEndTime = 0L
+    private var ollamaStartTime = 0L
+    private var ollamaEndTime = 0L
+
+    // Add this near the top of the class, with other properties
+    private val phaseTimestamps = mutableMapOf<AnalysisPhase, Long>()
+
+    // Add this helper function to the class
+    private fun recordPhaseStart(phase: AnalysisPhase) {
+        phaseTimestamps[phase] = System.currentTimeMillis()
+    }
 
     enum class AnalysisPhase {
         NONE,
@@ -65,14 +81,13 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
         } finally {
             motionDetector?.stopDetection()
             motionDetector = null
-            System.gc()
         }
     }
 
     private fun startMotionPhase(callback: (String, AnalysisPhase) -> Unit) {
+        recordPhaseStart(AnalysisPhase.MOTION)
         isAnalyzing = true
         currentPhase = AnalysisPhase.MOTION
-        System.gc()
 
         val context = contextRef.get() ?: run {
             cleanup()
@@ -108,13 +123,32 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
 
         motionDetector?.stopDetection()
         motionDetector = null
-        System.gc()
 
         startLocationPhase(callback)
     }
 
+    private suspend fun runLocationAnalysis(context: Context, callback: (String, AnalysisPhase) -> Unit): Boolean {
+        return try {
+            withContext(Dispatchers.IO) {
+                locationAnalyzer = LocationAnalyzer(context)
+                val wifiScanner = WifiScanner(context)
+                val networks = wifiScanner.getWifiNetworks()
+                val response = locationAnalyzer?.analyzeLocation(networks)
+                callback("Location analysis complete: $response", AnalysisPhase.LOCATION)
+                true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Location analysis error", e)
+            false
+        } finally {
+            locationAnalyzer?.close()
+            locationAnalyzer = null
+        }
+    }
+
     private fun startLocationPhase(callback: (String, AnalysisPhase) -> Unit) {
         currentPhase = AnalysisPhase.LOCATION
+        recordPhaseStart(AnalysisPhase.LOCATION)
         callback("Starting location analysis...", AnalysisPhase.LOCATION)
 
         val context = contextRef.get() ?: run {
@@ -140,33 +174,111 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
         }
     }
 
-    private suspend fun runLocationAnalysis(context: Context, callback: (String, AnalysisPhase) -> Unit): Boolean {
-        return try {
-            withContext(Dispatchers.IO) {
-                locationAnalyzer = LocationAnalyzer(context)
-                val wifiScanner = WifiScanner(context)
-                val networks = wifiScanner.getWifiNetworks()
-                val response = locationAnalyzer?.analyzeLocation(networks)
-                callback("Location analysis complete: $response", AnalysisPhase.LOCATION)
-                true
+    private suspend fun performContextFusion(context: Context): String {
+        val motionStorage = MotionStorage(context)
+        val fileStorage = FileStorage(context)
+
+        val motionData = motionStorage.getMotionHistory() ?: "No motion data"
+        val locationData = fileStorage.getLastResponse() ?: "No location data"
+
+        var combinedAnalyzer: MotionLocationAnalyzer? = null
+        var contextFusionAnalyzer: ContextFusionAnalyzer? = null
+        var additionalAnalysis = ""
+
+
+
+        try {
+            // Create coroutine scope for our operations
+            val analysisScope = CoroutineScope(Dispatchers.Main + Job())
+
+            // Step 1: Run the MotionLocationAnalyzer
+            combinedAnalyzer = MotionLocationAnalyzer(context)
+            val analysisPromise = CompletableDeferred<String>()
+            // Pre-define the Ollama promise
+            val ollamaPromise = CompletableDeferred<String>()
+
+            combinedAnalyzer.startAnalysis { result ->
+                if (result.contains("Retrieving combined results")) {
+                    analysisPromise.complete(result)
+                }
+            }
+
+            additionalAnalysis = analysisPromise.await()
+
+            // Step 2: Run both fusion analyzers if we have analysis results
+            if (additionalAnalysis.isNotEmpty()) {
+                contextFusionAnalyzer = ContextFusionAnalyzer(context, analysisScope)
+
+                // Step 2a: Perform standard LLM fusion
+                llmStartTime = System.currentTimeMillis()
+                llmFusionResult = contextFusionAnalyzer.performFusion()
+                llmEndTime = System.currentTimeMillis()
+
+                // Step 2b: Perform Ollama fusion
+                ollamaStartTime = System.currentTimeMillis()
+                contextFusionAnalyzer.performOllamaFusion { result ->
+                    ollamaPromise.complete(result)
+                }
+
+                // Wait for Ollama fusion result
+                ollamaFusionResult = ollamaPromise.await()
+                ollamaEndTime = System.currentTimeMillis()
+
+                // At this point we have both fusion results:
+                // - llmFusionResult: contains the standard LLM fusion result
+                // - ollamaFusionResult: contains the Ollama-based fusion result
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Location analysis error", e)
-            false
+            Log.e(TAG, "Error during analysis sequence", e)
+            // Handle the error appropriately
+            llmFusionResult = "Error during analysis: ${e.message}"
+            ollamaFusionResult = "Error during analysis: ${e.message}"
         } finally {
-            locationAnalyzer?.close()
-            locationAnalyzer = null
-            System.gc()
+            combinedAnalyzer?.close()
+            contextFusionAnalyzer?.close()
+        }
+
+        val dateFormat = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault())
+
+        return buildString {
+            append("=== Initial Analysis ===\n")
+            append("Motion: $motionData\n")
+            append("Location: $locationData\n\n")
+            append("=== Motion Location Analysis ===\n")
+            append(additionalAnalysis)
+            append("\n\n=== Context Fusion Analysis ===\n")
+
+            // LLM Analysis with timing
+            append("LLM Analysis:\n")
+            append("--------------\n")
+            if (llmStartTime > 0 && llmEndTime > 0) {
+                append("Started: ${dateFormat.format(java.util.Date(llmStartTime))}\n")
+                append("Completed: ${dateFormat.format(java.util.Date(llmEndTime))}\n")
+                append("Duration: ${(llmEndTime - llmStartTime) / 1000.0} seconds\n")
+                append("Results:\n")
+            }
+            append(llmFusionResult)
+
+            // Ollama Analysis with timing
+            append("\n\nOllama Analysis:\n")
+            append("---------------\n")
+            if (ollamaStartTime > 0 && ollamaEndTime > 0) {
+                append("Started: ${dateFormat.format(java.util.Date(ollamaStartTime))}\n")
+                append("Completed: ${dateFormat.format(java.util.Date(ollamaEndTime))}\n")
+                append("Duration: ${(ollamaEndTime - ollamaStartTime) / 1000.0} seconds\n")
+                append("Results:\n")
+            }
+            append(ollamaFusionResult)
         }
     }
 
     private fun startFusionPhase(callback: (String, AnalysisPhase) -> Unit) {
+        recordPhaseStart(AnalysisPhase.FUSION)
         currentPhase = AnalysisPhase.FUSION
         callback("Starting context fusion...", AnalysisPhase.FUSION)
 
         locationAnalyzer?.close()
         locationAnalyzer = null
-        System.gc()
 
         currentJob = analyzerScope.launch {
             try {
@@ -191,66 +303,8 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
         }
     }
 
-    private suspend fun performContextFusion(context: Context): String {
-        val motionStorage = MotionStorage(context)
-        val fileStorage = FileStorage(context)
-
-        val motionData = motionStorage.getMotionHistory() ?: "No motion data"
-        val locationData = fileStorage.getLastResponse() ?: "No location data"
-
-        var combinedAnalyzer: MotionLocationAnalyzer? = null
-        var additionalAnalysis = ""
-        var contextFusionAnalyzer: ContextFusionAnalyzer? = null
-        var llmFusionResult = ""
-
-        try {
-            // Step 1: Run the MotionLocationAnalyzer and wait for its completion
-            combinedAnalyzer = MotionLocationAnalyzer(context)
-            val analysisPromise = CompletableDeferred<String>()
-
-            combinedAnalyzer.startAnalysis { result ->
-                if (result.contains("Retrieving combined results")) {
-                    analysisPromise.complete(result)
-                }
-            }
-
-            // Wait for motion analysis to complete before proceeding
-            additionalAnalysis = analysisPromise.await()
-
-            // Step 2: Only after motion analysis is complete, run the ContextFusionAnalyzer
-            if (additionalAnalysis.isNotEmpty()) {
-                contextFusionAnalyzer = ContextFusionAnalyzer(context)
-                llmFusionResult = contextFusionAnalyzer.performFusion()
-            }
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in fusion analysis", e)
-            if (additionalAnalysis.isEmpty()) {
-                additionalAnalysis = "Additional analysis failed: ${e.message}"
-            }
-            if (llmFusionResult.isEmpty()) {
-                llmFusionResult = "LLM fusion failed: ${e.message}"
-            }
-        } finally {
-            combinedAnalyzer?.close()
-            combinedAnalyzer = null
-            contextFusionAnalyzer?.close()
-            contextFusionAnalyzer = null
-            System.gc()
-        }
-
-        return buildString {
-            append("=== Initial Analysis ===\n")
-            append("Motion: $motionData\n")
-            append("Location: $locationData\n\n")
-            append("=== Motion Location Analysis ===\n")
-            append(additionalAnalysis)
-            append("\n\n=== Context Fusion Analysis ===\n")
-            append(llmFusionResult)
-        }
-    }
-
     private fun finishAnalysis(callback: (String, AnalysisPhase) -> Unit) {
+        recordPhaseStart(AnalysisPhase.COMPLETE)
         currentPhase = AnalysisPhase.COMPLETE
         val results = getCombinedResults()
         callback(results, AnalysisPhase.COMPLETE)
@@ -261,17 +315,66 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
         val context = contextRef.get() ?: return "Context no longer available"
 
         val resultBuilder = StringBuilder()
-
-        resultBuilder.append("=== Motion Analysis Results ===\n")
         val motionStorage = MotionStorage(context)
-        val motionHistory = motionStorage.getMotionHistory()
-        resultBuilder.append(motionHistory ?: "No motion data available")
-        resultBuilder.append("\n\n")
-
-        resultBuilder.append("=== Location Analysis Results ===\n")
         val fileStorage = FileStorage(context)
-        val locationHistory = fileStorage.getLastResponse()
-        resultBuilder.append(locationHistory ?: "No location data available")
+
+        val dateFormat = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault())
+
+        resultBuilder.apply {
+            append("Analysis Summary Report\n")
+            append("=====================\n\n")
+
+            // Phase Timing Information
+            append("Phase Timing:\n")
+            append("--------------\n")
+            phaseTimestamps.forEach { (phase, timestamp) ->
+                append("${phase.name}: ${dateFormat.format(java.util.Date(timestamp))}\n")
+            }
+            append("\n")
+
+            // Motion Phase Results
+            append("=== Motion Phase Results ===\n")
+            append("Started at: ${dateFormat.format(java.util.Date(phaseTimestamps[AnalysisPhase.MOTION] ?: 0))}\n")
+            append(motionStorage.getMotionHistory() ?: "No motion data available")
+
+            // Location Phase Results
+            append("\n\n=== Location Phase Results ===\n")
+            append("Started at: ${dateFormat.format(java.util.Date(phaseTimestamps[AnalysisPhase.LOCATION] ?: 0))}\n")
+            append(fileStorage.getLastResponse() ?: "No location data available")
+
+            // Fusion Phase Results
+            append("\n\n=== Fusion Phase Results ===\n")
+            append("Started at: ${dateFormat.format(java.util.Date(phaseTimestamps[AnalysisPhase.FUSION] ?: 0))}\n")
+
+            // LLM Analysis with timing
+            append("\nLLM Analysis:\n")
+            append("--------------\n")
+            if (llmStartTime > 0 && llmEndTime > 0) {
+                append("Started: ${dateFormat.format(java.util.Date(llmStartTime))}\n")
+                append("Completed: ${dateFormat.format(java.util.Date(llmEndTime))}\n")
+                append("Duration: ${(llmEndTime - llmStartTime) / 1000.0} seconds\n")
+                append("Results:\n")
+            }
+            append(llmFusionResult.ifBlank { "No LLM fusion analysis available" })
+
+            // Ollama Analysis with timing
+            append("\n\nOllama Analysis:\n")
+            append("---------------\n")
+            if (ollamaStartTime > 0 && ollamaEndTime > 0) {
+                append("Started: ${dateFormat.format(java.util.Date(ollamaStartTime))}\n")
+                append("Completed: ${dateFormat.format(java.util.Date(ollamaEndTime))}\n")
+                append("Duration: ${(ollamaEndTime - ollamaStartTime) / 1000.0} seconds\n")
+                append("Results:\n")
+            }
+            append(ollamaFusionResult.ifBlank { "No Ollama analysis available" })
+
+            // Analysis Completion
+            phaseTimestamps[AnalysisPhase.COMPLETE]?.let { completeTime ->
+                append("\n\nAnalysis Completed at: ${dateFormat.format(java.util.Date(completeTime))}\n")
+                val totalTime = completeTime - (phaseTimestamps[AnalysisPhase.MOTION] ?: completeTime)
+                append("Total Analysis Time: ${totalTime / 1000.0} seconds")
+            }
+        }
 
         return resultBuilder.toString()
     }
@@ -292,12 +395,10 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
         locationAnalyzer = null
         isAnalyzing = false
         currentPhase = AnalysisPhase.NONE
-        System.gc()
     }
 
     override fun close() {
         stopAnalysis()
         analyzerScope.cancel()
-        System.gc()
     }
 }
