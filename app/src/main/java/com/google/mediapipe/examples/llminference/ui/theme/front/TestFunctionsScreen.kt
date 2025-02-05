@@ -17,6 +17,7 @@ import com.google.mediapipe.examples.llminference.ContextFusionAnalyzer
 import com.google.mediapipe.examples.llminference.server.OllamaClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig
 
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,7 +50,7 @@ class TestFunctionsViewModel : ViewModel() {
             try {
                 _chatResponse.value = "Loading..."
                 val response = ollamaClient.chat(
-                    model = "deepseek-r1:1.5b",
+                    model = ModelConfig.OLLAMA_MODEL,
                     message = "Hello, how are you?"
                 )
 

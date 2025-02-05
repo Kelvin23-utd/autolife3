@@ -9,6 +9,7 @@ import kotlinx.coroutines.withContext
 import java.io.Closeable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig
 
 class ContextFusionAnalyzer(
     private val context: Context,
@@ -36,7 +37,7 @@ class ContextFusionAnalyzer(
             val truncatedLocation = locationHistory.takeLast(200)
 
             val prompt = """
-                Given the following data, describe the most likely activity in exactly 20 words:
+                Select the most probable motion with location and motion context within 50 words:
                 Motion: $truncatedMotion
                 Location: $truncatedLocation
             """.trimIndent()
@@ -60,7 +61,7 @@ class ContextFusionAnalyzer(
     }
 
     suspend fun performOllamaFusion(
-        model: String = "llama3.2:latest",
+        model: String =ModelConfig.OLLAMA_MODEL,
         onResult: (String) -> Unit
     ) {
         withContext(Dispatchers.IO) {
@@ -75,7 +76,7 @@ class ContextFusionAnalyzer(
                 val truncatedLocation = locationHistory.takeLast(200)
 
                 val prompt = """
-                    Given the following data, describe the most likely activity in exactly 20 words:
+                    Select the most probable motion with location and motion context within 50 words:
                     Motion: $truncatedMotion
                     Location: $truncatedLocation
                 """.trimIndent()
@@ -107,7 +108,7 @@ class ContextFusionAnalyzer(
             try {
                 onResult("Loading...")
                 val response = ollamaClient.chat(
-                    model = "llama3.2:latest",
+                    model = ModelConfig.OLLAMA_MODEL,
                     message = "Hello, how are you?"
                 )
 

@@ -6,6 +6,12 @@ import kotlinx.coroutines.*
 import java.io.Closeable
 import java.lang.ref.WeakReference
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig
+import java.io.File
+
+import android.os.Debug
+import java.io.RandomAccessFile
+import kotlin.math.roundToInt
 
 class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
     companion object {
@@ -34,6 +40,20 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
     // Add this near the top of the class, with other properties
     private val phaseTimestamps = mutableMapOf<AnalysisPhase, Long>()
 
+    // Add memory monitoring properties
+    private val phaseMemoryInfo = mutableMapOf<AnalysisPhase, MemoryInfo>()
+    private data class MemoryInfo(
+        val timestamp: Long,
+        val memoryStats: MemoryMonitor.MemoryInfo
+    )
+
+    private fun recordPhaseMemory(phase: AnalysisPhase) {
+        val timestamp = System.currentTimeMillis()
+        val memoryStats = MemoryMonitor.getMemoryInfo()
+        phaseMemoryInfo[phase] = MemoryInfo(timestamp, memoryStats)
+        Log.d(TAG, "Memory usage at $phase:\n$memoryStats")
+    }
+
     // Add this helper function to the class
     private fun recordPhaseStart(phase: AnalysisPhase) {
         phaseTimestamps[phase] = System.currentTimeMillis()
@@ -52,6 +72,15 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
             callback("Analysis already in progress", currentPhase)
             return
         }
+
+        // Reset analysis data from previous runs
+        llmFusionResult = ""
+        ollamaFusionResult = ""
+        llmStartTime = 0L
+        llmEndTime = 0L
+        ollamaStartTime = 0L
+        ollamaEndTime = 0L
+        phaseTimestamps.clear()
 
         val context = contextRef.get() ?: run {
             callback("Context no longer available", AnalysisPhase.NONE)
@@ -85,9 +114,11 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
     }
 
     private fun startMotionPhase(callback: (String, AnalysisPhase) -> Unit) {
-        recordPhaseStart(AnalysisPhase.MOTION)
         isAnalyzing = true
         currentPhase = AnalysisPhase.MOTION
+        recordPhaseStart(AnalysisPhase.MOTION)
+        recordPhaseMemory(AnalysisPhase.MOTION)
+
 
         val context = contextRef.get() ?: run {
             cleanup()
@@ -149,6 +180,7 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
     private fun startLocationPhase(callback: (String, AnalysisPhase) -> Unit) {
         currentPhase = AnalysisPhase.LOCATION
         recordPhaseStart(AnalysisPhase.LOCATION)
+        recordPhaseMemory(AnalysisPhase.LOCATION)
         callback("Starting location analysis...", AnalysisPhase.LOCATION)
 
         val context = contextRef.get() ?: run {
@@ -274,6 +306,7 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
 
     private fun startFusionPhase(callback: (String, AnalysisPhase) -> Unit) {
         recordPhaseStart(AnalysisPhase.FUSION)
+        recordPhaseMemory(AnalysisPhase.FUSION)
         currentPhase = AnalysisPhase.FUSION
         callback("Starting context fusion...", AnalysisPhase.FUSION)
 
@@ -305,8 +338,10 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
 
     private fun finishAnalysis(callback: (String, AnalysisPhase) -> Unit) {
         recordPhaseStart(AnalysisPhase.COMPLETE)
+        recordPhaseMemory(AnalysisPhase.COMPLETE)
         currentPhase = AnalysisPhase.COMPLETE
         val results = getCombinedResults()
+        saveAnalysisReport(results)
         callback(results, AnalysisPhase.COMPLETE)
         cleanup()
     }
@@ -374,9 +409,65 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
                 val totalTime = completeTime - (phaseTimestamps[AnalysisPhase.MOTION] ?: completeTime)
                 append("Total Analysis Time: ${totalTime / 1000.0} seconds")
             }
+
+            // Add Memory Usage Section
+            append("\n\n=== Memory Usage Analysis ===\n")
+            append("Memory statistics for each phase:\n\n")
+
+            phaseMemoryInfo.forEach { (phase, memInfo) ->
+                append("${phase.name} Phase Memory Stats:\n")
+                append("Timestamp: ${dateFormat.format(java.util.Date(memInfo.timestamp))}\n")
+                append("${memInfo.memoryStats}\n\n")
+            }
+
+            // Calculate memory differences between phases
+            if (phaseMemoryInfo.size > 1) {
+                append("Memory Usage Changes Between Phases:\n")
+                phaseMemoryInfo.entries.zipWithNext().forEach { (first, second) ->
+                    val firstStats = first.value.memoryStats
+                    val secondStats = second.value.memoryStats
+
+                    append("\n${first.key} → ${second.key}:\n")
+                    append("Java Heap Change: ${secondStats.usedMemoryMB - firstStats.usedMemoryMB}MB\n")
+                    append("Native Heap Change: ${secondStats.nativeHeapMB - firstStats.nativeHeapMB}MB\n")
+                    append("PSS Change: ${secondStats.totalPSSMB - firstStats.totalPSSMB}MB\n")
+                    append("RSS Change: ${secondStats.totalRSSMB - firstStats.totalRSSMB}MB\n")
+                }
+            }
+
+            // Add existing model information
+            append("\n\nModel Information:\n")
+            append("The local model used:\n ${ModelConfig.LOCAL_MODEL_PATH}\n")
+            append("Ollama model used: \n ${ModelConfig.OLLAMA_MODEL}\n")
         }
 
         return resultBuilder.toString()
+    }
+
+    private fun saveAnalysisReport(report: String) {
+        val context = contextRef.get() ?: return
+
+        try {
+            // Create a timestamp for the filename
+            val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault())
+                .format(java.util.Date())
+
+            // Create filename with timestamp
+            val filename = "analysis_report_$timestamp.txt"
+
+            // Get the app's external files directory
+            context.getExternalFilesDir(null)?.let { dir ->
+                val reportFile = File(dir, filename)
+
+                // Write the report to the file
+                reportFile.writeText(report)
+
+                // Log the file location (optional)
+                Log.d("Analysis", "Report saved to: ${reportFile.absolutePath}")
+            }
+        } catch (e: Exception) {
+            Log.e("Analysis", "Error saving report", e)
+        }
     }
 
     fun getCurrentPhase(): AnalysisPhase = currentPhase

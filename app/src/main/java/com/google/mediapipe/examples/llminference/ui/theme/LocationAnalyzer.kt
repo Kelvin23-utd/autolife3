@@ -3,6 +3,7 @@ package com.google.mediapipe.examples.llminference
 import android.content.Context
 import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig
 import java.io.Closeable
 
 class LocationAnalyzer(private val context: Context) : Closeable {
@@ -66,20 +67,14 @@ object LlmManager {
     private val lock = Object()
 
 
-//    private val g2 = "/data/local/tmp/llm/gemma-2b-it-gpu-int4.bin"
-//    private val g22b = "/data/local/tmp/llm/gemma2-2b-gpu.bin"
-//
-//    private val fac = "/data/local/tmp/llm/falcon_gpu.bin"
-//    private val stb = "/data/local/tmp/llm/stablelm_gpu.bin"
-//    private val stb = "/data/local/tmp/llm/phi2_gpu.bin"
-//    private val g7b = "/data/local/tmp/llm/gemma-1.1-7b-it-gpu-int8.bin"
+
 
 
     fun getInstance(context: Context): LlmInference {
         synchronized(lock) {
             if (llmInstance == null) {
                 val options = LlmInference.LlmInferenceOptions.builder()
-                    .setModelPath("/data/local/tmp/llm/gemma-2b-it-gpu-int4.bin")
+                    .setModelPath(ModelConfig.LOCAL_MODEL_PATH)
                     .setMaxTokens(1024)
                     .build()
 
