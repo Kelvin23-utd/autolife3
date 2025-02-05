@@ -248,7 +248,7 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
 
                 // Step 2b: Perform Ollama fusion
                 ollamaStartTime = System.currentTimeMillis()
-                contextFusionAnalyzer.performOllamaFusion { result ->
+                contextFusionAnalyzer.performOllamaGeneration { result ->
                     ollamaPromise.complete(result)
                 }
 

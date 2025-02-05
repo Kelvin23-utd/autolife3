@@ -103,6 +103,49 @@ class ContextFusionAnalyzer(
         }
     }
 
+    suspend fun performOllamaGeneration(
+        model: String = ModelConfig.OLLAMA_MODEL,
+        onResult: (String) -> Unit
+    ) {
+        withContext(Dispatchers.IO) {
+            try {
+                motionStorage = MotionStorage(context)
+                fileStorage = FileStorage(context)
+
+                val motionHistory = motionStorage?.getMotionHistory() ?: "No motion data"
+                val locationHistory = fileStorage?.getLastResponse() ?: "No location data"
+
+                val truncatedMotion = motionHistory.takeLast(200)
+                val truncatedLocation = locationHistory.takeLast(200)
+
+                val prompt = """
+                Select the most probable motion with location and motion context within 50 words:
+                Motion: $truncatedMotion
+                Location: $truncatedLocation
+            """.trimIndent()
+
+                Log.d(TAG, "Sending Ollama generation prompt: $prompt")
+
+                val response = ollamaClient.generate(
+                    model = model,
+                    prompt = prompt
+                )
+
+                val result = when {
+                    response.isSuccess -> response.getOrNull()?.response ?: "Empty response"
+                    else -> "Error: ${response.exceptionOrNull()?.message}"
+                }
+
+                Log.d(TAG, "Received Ollama generation response: $result")
+                onResult(result)
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during Ollama generation analysis", e)
+                onResult("Error during Ollama generation: ${e.message}")
+            }
+        }
+    }
+
     fun testOllama(onResult: (String) -> Unit) {
         coroutineScope.launch {
             try {

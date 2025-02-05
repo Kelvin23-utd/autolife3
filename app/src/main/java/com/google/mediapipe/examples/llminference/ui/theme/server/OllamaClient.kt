@@ -82,4 +82,41 @@ class OllamaClient(baseUrl: String) {
             Result.failure(e)
         }
     }
+
+    suspend fun generate(model: String, prompt: String): Result<GenerateResponse> {
+        return try {
+            val requestStartTime = System.currentTimeMillis()
+            Log.d(tag, "Starting generate request at: $requestStartTime")
+
+            val request = GenerateRequest(
+                model = model,
+                prompt = prompt,
+                stream = false,
+                options = GenerateOptions(
+                    temperature = 0.7f,  // Default temperature
+                    top_p = 0.9f        // Default top_p
+                )
+            )
+
+            val response = service.generate(request)
+            val requestEndTime = System.currentTimeMillis()
+
+            Log.d(tag, "Request completed at: $requestEndTime")
+            Log.d(tag, "Total processing time: ${requestEndTime - requestStartTime}ms")
+
+            if (response.isSuccessful) {
+                response.body()?.let {
+                    Result.success(it)
+                } ?: Result.failure(Exception("Empty response"))
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Result.failure(Exception("Error: ${response.code()} - $errorBody"))
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Exception in generate request", e)
+            Result.failure(e)
+        }
+    }
+
+
 }
