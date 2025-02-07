@@ -38,10 +38,10 @@ class OllamaClient(baseUrl: String) {
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(TimingInterceptor())
         .addInterceptor(loggingInterceptor)
-        .connectTimeout(300, TimeUnit.SECONDS)    // Add explicit connect timeout
-        .writeTimeout(300, TimeUnit.SECONDS)      // Add explicit write timeout
-        .readTimeout(300, TimeUnit.SECONDS)       // Add explicit read timeout
-        .callTimeout(300, TimeUnit.SECONDS)       // Overall timeout
+        .connectTimeout(600, TimeUnit.SECONDS)    // Add explicit connect timeout
+        .writeTimeout(600, TimeUnit.SECONDS)      // Add explicit write timeout
+        .readTimeout(600, TimeUnit.SECONDS)       // Add explicit read timeout
+        .callTimeout(600, TimeUnit.SECONDS)       // Overall timeout
         .build()
 
     private val retrofit = Retrofit.Builder()

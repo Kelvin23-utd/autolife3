@@ -37,6 +37,10 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
     private var ollamaStartTime = 0L
     private var ollamaEndTime = 0L
 
+    // Add these with other timing variables
+    private var locationAnalysisStartTime = 0L
+    private var locationAnalysisEndTime = 0L
+
     // Add this near the top of the class, with other properties
     private val phaseTimestamps = mutableMapOf<AnalysisPhase, Long>()
 
@@ -164,7 +168,13 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
                 locationAnalyzer = LocationAnalyzer(context)
                 val wifiScanner = WifiScanner(context)
                 val networks = wifiScanner.getWifiNetworks()
+
+                // Start timing
+                locationAnalysisStartTime = System.currentTimeMillis()
                 val response = locationAnalyzer?.analyzeLocation(networks)
+                // End timing
+                locationAnalysisEndTime = System.currentTimeMillis()
+
                 callback("Location analysis complete: $response", AnalysisPhase.LOCATION)
                 true
             }
@@ -372,11 +382,15 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
             append("Started at: ${dateFormat.format(java.util.Date(phaseTimestamps[AnalysisPhase.MOTION] ?: 0))}\n")
             append(motionStorage.getMotionHistory() ?: "No motion data available")
 
-            // Location Phase Results
+// Update the Location Phase Results section in getCombinedResults():
             append("\n\n=== Location Phase Results ===\n")
             append("Started at: ${dateFormat.format(java.util.Date(phaseTimestamps[AnalysisPhase.LOCATION] ?: 0))}\n")
+            if (locationAnalysisStartTime > 0 && locationAnalysisEndTime > 0) {
+                append("Location Analysis Duration: ${(locationAnalysisEndTime - locationAnalysisStartTime) / 1000.0} seconds\n")
+                append("Analysis Start: ${dateFormat.format(java.util.Date(locationAnalysisStartTime))}\n")
+                append("Analysis End: ${dateFormat.format(java.util.Date(locationAnalysisEndTime))}\n")
+            }
             append(fileStorage.getLastResponse() ?: "No location data available")
-
             // Fusion Phase Results
             append("\n\n=== Fusion Phase Results ===\n")
             append("Started at: ${dateFormat.format(java.util.Date(phaseTimestamps[AnalysisPhase.FUSION] ?: 0))}\n")
