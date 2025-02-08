@@ -1,5 +1,6 @@
 package com.google.mediapipe.examples.llminference
 
+import UnifiedAIClient
 import android.content.Context
 import android.util.Log
 import com.google.mediapipe.examples.llminference.server.OllamaClient
@@ -10,6 +11,8 @@ import java.io.Closeable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 class ContextFusionAnalyzer(
     private val context: Context,
@@ -24,6 +27,8 @@ class ContextFusionAnalyzer(
     private val ollamaClient = OllamaClient(OLLAMA_BASE_URL)
     private var motionStorage: MotionStorage? = null
     private var fileStorage: FileStorage? = null
+
+    private val unified = UnifiedAIClient("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")
 
     suspend fun performFusion(): String = withContext(Dispatchers.IO) {
         try {
@@ -143,6 +148,48 @@ class ContextFusionAnalyzer(
                 Log.e(TAG, "Error during Ollama generation analysis", e)
                 onResult("Error during Ollama generation: ${e.message}")
             }
+        }
+    }
+
+
+    suspend fun performOpenAIFusion(): String = withContext(Dispatchers.IO) {
+        try {
+            motionStorage = MotionStorage(context)
+            fileStorage = FileStorage(context)
+
+            val motionHistory = motionStorage?.getMotionHistory() ?: "No motion data"
+            val locationHistory = fileStorage?.getLastResponse() ?: "No location data"
+
+            val truncatedMotion = motionHistory.takeLast(200)
+            val truncatedLocation = locationHistory.takeLast(200)
+
+            val prompt = """
+            Select the most probable motion with location and motion context within 50 words:
+            Motion: $truncatedMotion
+            Location: $truncatedLocation
+        """.trimIndent()
+
+            Log.d(TAG, "Sending OpenAI fusion prompt: $prompt")
+
+            // Use suspendCoroutine to convert callback-based API to suspend function
+            suspendCoroutine<String> { continuation ->
+                unified.easyCall(
+                    prompt = prompt,
+                    scope = coroutineScope,
+                    onStart = { /* No need to handle start state for direct return */ },
+                    onSuccess = { result ->
+                        Log.d(TAG, "Received OpenAI fusion response: $result")
+                        continuation.resume(result)
+                    },
+                    onError = { error ->
+                        Log.e(TAG, "Error during OpenAI fusion analysis: $error")
+                        continuation.resume("Error during OpenAI fusion: $error")
+                    }
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during OpenAI fusion analysis", e)
+            "Error during OpenAI fusion: ${e.message}"
         }
     }
 

@@ -1,8 +1,7 @@
 package com.google.mediapipe.examples.llminference.ui.theme.front
 
 
-import OpenAIClient
-import android.content.ContentValues.TAG
+import UnifiedAIClient
 import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.layout.*
@@ -23,7 +22,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig
 
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 
@@ -51,47 +49,68 @@ class TestFunctionsViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
-    private val openAIClient = OpenAIClient("")
+    private val openAIClient = UnifiedAIClient("")
 
     private companion object {
         private const val TAG = "ApiRequestVM" // Adjust tag name as needed
     }
 
+//    fun testApiRequest1() {
+//        viewModelScope.launch(Dispatchers.IO) {
+//            try {
+//                withContext(Dispatchers.Main) {
+//                    _isLoading.value = true
+//                    _apiResponse.value = "Loading..."
+//                }
+//
+//                val response = openAIClient.getCompletion("how was your busy day ? within 50 wrods")
+//
+//                withContext(Dispatchers.Main) {
+//                    _apiResponse.value = when {
+//                        response.isSuccess -> response.getOrNull()?.choices?.firstOrNull()?.message?.content
+//                            ?: run {
+//                                Log.e(TAG, "Empty response received from API")
+//                                "Empty response"
+//                            }
+//                        else -> {
+//                            val error = response.exceptionOrNull()
+//                            Log.e(TAG, "API request failed", error)
+//                            "Error: ${error?.message}"
+//                        }
+//                    }
+//                }
+//            } catch (e: Exception) {
+//                Log.e(TAG, "Exception during API request", e)
+//                withContext(Dispatchers.Main) {
+//                    _apiResponse.value = "Error: ${e.message}"
+//                }
+//            } finally {
+//                withContext(Dispatchers.Main) {
+//                    _isLoading.value = false
+//                }
+//            }
+//        }
+//    }
+
     fun testApiRequest() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                withContext(Dispatchers.Main) {
-                    _isLoading.value = true
-                    _apiResponse.value = "Loading..."
-                }
-
-                val response = openAIClient.getCompletion("我们一起去看星星怎么样， 达拉斯今天看星星有推荐吗？within 50 wrods")
-
-                withContext(Dispatchers.Main) {
-                    _apiResponse.value = when {
-                        response.isSuccess -> response.getOrNull()?.choices?.firstOrNull()?.message?.content
-                            ?: run {
-                                Log.e(TAG, "Empty response received from API")
-                                "Empty response"
-                            }
-                        else -> {
-                            val error = response.exceptionOrNull()
-                            Log.e(TAG, "API request failed", error)
-                            "Error: ${error?.message}"
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Exception during API request", e)
-                withContext(Dispatchers.Main) {
-                    _apiResponse.value = "Error: ${e.message}"
-                }
-            } finally {
-                withContext(Dispatchers.Main) {
-                    _isLoading.value = false
-                }
+        openAIClient.easyCall(
+            prompt = "how was your busy day ? within 50 wrods",
+            scope = viewModelScope,
+            onStart = {
+                _isLoading.value = true
+                _apiResponse.value = "Loading..."
+            },
+            onSuccess = { response ->
+                _apiResponse.value = response
+            },
+            onError = { error ->
+                Log.e(TAG, "API request failed: $error")
+                _apiResponse.value = error
+            },
+            onComplete = {
+                _isLoading.value = false
             }
-        }
+        )
     }
 
 

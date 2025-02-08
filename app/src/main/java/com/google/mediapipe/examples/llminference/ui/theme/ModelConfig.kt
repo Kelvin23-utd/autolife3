@@ -25,6 +25,8 @@ object ModelConfig {
     const val LOCAL_MODEL_PATH = GEMMA2
     const val OLLAMA_MODEL = QWEN5B
 
+    const val USE_API = 1
+
     //    const private val fac = "/data/local/tmp/llm/falcon_gpu.bin"
     //    const private val stb = "/data/local/tmp/llm/stablelm_gpu.bin"
     //    const private val stb = "/data/local/tmp/llm/phi2_gpu.bin"

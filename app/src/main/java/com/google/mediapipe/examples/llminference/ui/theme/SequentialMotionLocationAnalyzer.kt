@@ -257,7 +257,7 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
 
                 // Step 2a: Perform standard LLM fusion
                 llmStartTime = System.currentTimeMillis()
-                llmFusionResult = contextFusionAnalyzer.performFusion()
+                llmFusionResult = contextFusionAnalyzer.performOpenAIFusion()
                 llmEndTime = System.currentTimeMillis()
 
                 // Step 2b: Perform Ollama fusion
