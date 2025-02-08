@@ -22,7 +22,7 @@ object ModelConfig {
     const val QWEN4B = "qwen:4b"
     const val QWEN7B = "qwen:7b"
 
-    const val LOCAL_MODEL_PATH = GEMMA
+    const val LOCAL_MODEL_PATH = GEMMA2
     const val OLLAMA_MODEL = QWEN5B
 
     //    const private val fac = "/data/local/tmp/llm/falcon_gpu.bin"

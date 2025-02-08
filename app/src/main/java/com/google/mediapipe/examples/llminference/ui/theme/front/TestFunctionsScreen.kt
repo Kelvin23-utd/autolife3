@@ -1,7 +1,10 @@
 package com.google.mediapipe.examples.llminference.ui.theme.front
 
 
+import OpenAIClient
+import android.content.ContentValues.TAG
 import android.content.Context
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -22,8 +25,10 @@ import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
 
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // TestFunctionsViewModel.kt
 class TestFunctionsViewModel : ViewModel() {
@@ -38,6 +43,57 @@ class TestFunctionsViewModel : ViewModel() {
 
     private val ollamaClient = OllamaClient("http://localhost:11434")
     private var fusionAnalyzer: ContextFusionAnalyzer? = null
+
+
+    private val _apiResponse = MutableStateFlow<String?>(null)
+    val apiResponse = _apiResponse.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading = _isLoading.asStateFlow()
+
+    private val openAIClient = OpenAIClient("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")
+
+    private companion object {
+        private const val TAG = "ApiRequestVM" // Adjust tag name as needed
+    }
+
+    fun testApiRequest() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                withContext(Dispatchers.Main) {
+                    _isLoading.value = true
+                    _apiResponse.value = "Loading..."
+                }
+
+                val response = openAIClient.getCompletion("我们一起去看星星怎么样， 达拉斯今天看星星有推荐吗？within 50 wrods")
+
+                withContext(Dispatchers.Main) {
+                    _apiResponse.value = when {
+                        response.isSuccess -> response.getOrNull()?.choices?.firstOrNull()?.message?.content
+                            ?: run {
+                                Log.e(TAG, "Empty response received from API")
+                                "Empty response"
+                            }
+                        else -> {
+                            val error = response.exceptionOrNull()
+                            Log.e(TAG, "API request failed", error)
+                            "Error: ${error?.message}"
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception during API request", e)
+                withContext(Dispatchers.Main) {
+                    _apiResponse.value = "Error: ${e.message}"
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    _isLoading.value = false
+                }
+            }
+        }
+    }
+
 
     fun initializeFusionAnalyzer(context: Context) {
         if (fusionAnalyzer == null) {
@@ -87,7 +143,7 @@ class TestFunctionsViewModel : ViewModel() {
     }
 }
 
-// TestFunctionsScreen.kt
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TestFunctionsScreen(
@@ -98,6 +154,8 @@ fun TestFunctionsScreen(
     val chatResponse = viewModel.chatResponse.collectAsStateWithLifecycle()
     val fusionResult = viewModel.fusionResult.collectAsStateWithLifecycle()
     val isFusing = viewModel.isFusing.collectAsStateWithLifecycle()
+    val apiResponse = viewModel.apiResponse.collectAsStateWithLifecycle()
+    val isLoading = viewModel.isLoading.collectAsStateWithLifecycle()
 
     // Initialize fusion analyzer
     LaunchedEffect(Unit) {
@@ -122,6 +180,16 @@ fun TestFunctionsScreen(
                 .padding(paddingValues)
                 .verticalScroll(rememberScrollState())
         ) {
+            // API Request Test Card
+            TestFunctionCard(
+                title = "Test API Request",
+                description = "Send a request to get an AI-generated haiku",
+                onTest = {
+                    viewModel.testApiRequest()
+                },
+                isLoading = isLoading.value
+            )
+
             // Ollama Test Card
             TestFunctionCard(
                 title = "Test Ollama",
@@ -146,6 +214,15 @@ fun TestFunctionsScreen(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // API Request Results
+                apiResponse.value?.let { response ->
+                    ResultCard(
+                        title = "API Request Result",
+                        content = response,
+                        isLoading = isLoading.value
+                    )
+                }
+
                 // Ollama Results
                 chatResponse.value?.let { response ->
                     ResultCard(
@@ -209,11 +286,6 @@ private fun TestFunctionCard(
 }
 
 @Composable
-fun rememberTestFunctionsViewModel(): TestFunctionsViewModel {
-    return viewModel<TestFunctionsViewModel>()
-}
-
-@Composable
 private fun ResultCard(
     title: String,
     content: String,
@@ -243,3 +315,10 @@ private fun ResultCard(
         }
     }
 }
+
+@Composable
+fun rememberTestFunctionsViewModel(): TestFunctionsViewModel {
+    return viewModel<TestFunctionsViewModel>()
+}
+
+

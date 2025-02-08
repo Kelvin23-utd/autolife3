@@ -1,5 +1,6 @@
 package com.google.mediapipe.examples.llminference
 
+import MemoryMonitor
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.*
@@ -51,9 +52,10 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
         val memoryStats: MemoryMonitor.MemoryInfo
     )
 
-    private fun recordPhaseMemory(phase: AnalysisPhase) {
+    private fun recordPhaseMemory(phase: AnalysisPhase, context: Context) {
         val timestamp = System.currentTimeMillis()
-        val memoryStats = MemoryMonitor.getMemoryInfo()
+        val memoryMonitor = MemoryMonitor(context)
+        val memoryStats = memoryMonitor.getMemoryInfo()
         phaseMemoryInfo[phase] = MemoryInfo(timestamp, memoryStats)
         Log.d(TAG, "Memory usage at $phase:\n$memoryStats")
     }
@@ -121,7 +123,7 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
         isAnalyzing = true
         currentPhase = AnalysisPhase.MOTION
         recordPhaseStart(AnalysisPhase.MOTION)
-        recordPhaseMemory(AnalysisPhase.MOTION)
+
 
 
         val context = contextRef.get() ?: run {
@@ -129,6 +131,7 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
             callback("Context no longer available", AnalysisPhase.NONE)
             return
         }
+        recordPhaseMemory(AnalysisPhase.MOTION, context)
 
         currentJob = analyzerScope.launch {
             try {
@@ -190,7 +193,7 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
     private fun startLocationPhase(callback: (String, AnalysisPhase) -> Unit) {
         currentPhase = AnalysisPhase.LOCATION
         recordPhaseStart(AnalysisPhase.LOCATION)
-        recordPhaseMemory(AnalysisPhase.LOCATION)
+
         callback("Starting location analysis...", AnalysisPhase.LOCATION)
 
         val context = contextRef.get() ?: run {
@@ -198,6 +201,7 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
             callback("Context no longer available", AnalysisPhase.NONE)
             return
         }
+        recordPhaseMemory(AnalysisPhase.LOCATION, context)
 
         currentJob = analyzerScope.launch {
             try {
@@ -316,9 +320,11 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
 
     private fun startFusionPhase(callback: (String, AnalysisPhase) -> Unit) {
         recordPhaseStart(AnalysisPhase.FUSION)
-        recordPhaseMemory(AnalysisPhase.FUSION)
+
         currentPhase = AnalysisPhase.FUSION
         callback("Starting context fusion...", AnalysisPhase.FUSION)
+
+
 
         locationAnalyzer?.close()
         locationAnalyzer = null
@@ -331,6 +337,8 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
                         callback("Context no longer available", AnalysisPhase.NONE)
                         return@withContext
                     }
+
+                    recordPhaseMemory(AnalysisPhase.FUSION, context)
 
                     val result = performContextFusion(context)
                     withContext(Dispatchers.Main) {
@@ -348,7 +356,6 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
 
     private fun finishAnalysis(callback: (String, AnalysisPhase) -> Unit) {
         recordPhaseStart(AnalysisPhase.COMPLETE)
-        recordPhaseMemory(AnalysisPhase.COMPLETE)
         currentPhase = AnalysisPhase.COMPLETE
         val results = getCombinedResults()
         saveAnalysisReport(results)

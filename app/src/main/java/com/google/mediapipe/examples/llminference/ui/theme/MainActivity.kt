@@ -1,5 +1,6 @@
 package com.google.mediapipe.examples.llminference
 
+import MemoryMonitor
 import android.Manifest
 import android.content.ComponentCallbacks2
 import android.os.Bundle
@@ -66,7 +67,9 @@ fun MainScreen(
     var currentAnalysis by remember { mutableStateOf<String?>(null) }
     var currentPhase by remember { mutableStateOf(SequentialMotionLocationAnalyzer.AnalysisPhase.NONE) }
     var isAnalyzing by remember { mutableStateOf(false) }
-    var memoryInfo by remember { mutableStateOf(MemoryMonitor.getMemoryInfo()) }
+    // Create MemoryMonitor instance with context
+    val memoryMonitor = remember { MemoryMonitor(context) }
+    var memoryInfo by remember { mutableStateOf(memoryMonitor.getMemoryInfo()) }
 
     val analyzer = remember { SequentialMotionLocationAnalyzer(context) }
     val scope = rememberCoroutineScope()
@@ -116,12 +119,12 @@ fun MainScreen(
                         if (!isAnalyzing) {
                             isAnalyzing = true
                             scope.launch {
-                                memoryInfo = MemoryMonitor.getMemoryInfo()
+                                memoryInfo = memoryMonitor.getMemoryInfo()
                                 analyzer.startAnalysis { result, phase ->
                                     currentAnalysis = result
                                     currentPhase = phase
                                     scope.launch {
-                                        memoryInfo = MemoryMonitor.getMemoryInfo()
+                                        memoryInfo = memoryMonitor.getMemoryInfo()
                                     }
                                     if (phase == SequentialMotionLocationAnalyzer.AnalysisPhase.COMPLETE) {
                                         isAnalyzing = false
