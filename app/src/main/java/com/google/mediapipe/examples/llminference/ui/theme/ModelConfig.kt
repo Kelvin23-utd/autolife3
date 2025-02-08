@@ -27,8 +27,5 @@ object ModelConfig {
 
     const val USE_API = 1
 
-    //    const private val fac = "/data/local/tmp/llm/falcon_gpu.bin"
-    //    const private val stb = "/data/local/tmp/llm/stablelm_gpu.bin"
-    //    const private val stb = "/data/local/tmp/llm/phi2_gpu.bin"
-    //    const private val g7b = "/data/local/tmp/llm/gemma-1.1-7b-it-gpu-int8.bin"
+
 }
