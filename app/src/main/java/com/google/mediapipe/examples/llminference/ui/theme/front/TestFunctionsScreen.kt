@@ -51,7 +51,7 @@ class TestFunctionsViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
-    private val openAIClient = OpenAIClient("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")
+    private val openAIClient = OpenAIClient("")
 
     private companion object {
         private const val TAG = "ApiRequestVM" // Adjust tag name as needed
