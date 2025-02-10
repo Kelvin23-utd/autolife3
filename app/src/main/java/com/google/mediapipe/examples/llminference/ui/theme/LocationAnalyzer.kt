@@ -7,6 +7,7 @@ import android.util.Log
 import com.google.mediapipe.examples.llminference.ui.theme.ApiConfig
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig
+import com.google.mediapipe.examples.llminference.ui.theme.cloudAI
 import com.google.mediapipe.examples.llminference.ui.theme.server.AIProvider
 import com.google.mediapipe.examples.llminference.ui.theme.server.UnifiedAIManager
 import kotlinx.coroutines.Dispatchers
@@ -27,10 +28,10 @@ class LocationAnalyzer(private val context: Context) : Closeable {
     private val llmInference: LlmInference? by lazy {
         if (ModelConfig.USE_API != 1) LlmManager.getInstance(context) else null
     }
-    val openAIClient = UnifiedAIManager(
-        geminiKey = ApiConfig.LLM_API_KEY,
-        defaultProvider = AIProvider.GEMINI
-    )
+//    val openAIClient = UnifiedAIManager(
+//        claudeKey = ApiConfig.CLAUDE_KEY,
+//        defaultProvider = AIProvider.CLAUDE
+//    )
 
     suspend fun analyzeLocation(ssids: List<String>): String {
         val prompt = """
@@ -46,7 +47,7 @@ class LocationAnalyzer(private val context: Context) : Closeable {
             // Use API
             withContext(Dispatchers.IO) {
                 suspendCancellableCoroutine { continuation ->
-                    openAIClient.easyCall(
+                    cloudAI.easyCall(
                         prompt = prompt,
                         scope = CoroutineScope(continuation.context),
                         onSuccess = { response -> continuation.resume(response) },
@@ -83,7 +84,7 @@ object LlmManager {
             if (llmInstance == null) {
                 val options = LlmInference.LlmInferenceOptions.builder()
                     .setModelPath(ModelConfig.LOCAL_MODEL_PATH)
-                    .setMaxTokens(1024)
+                    .setMaxTokens(6000)
                     .build()
 
                 llmInstance = LlmInference.createFromOptions(context, options)

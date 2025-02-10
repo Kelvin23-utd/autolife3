@@ -11,6 +11,7 @@ import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig
 import java.io.File
 
 import android.os.Debug
+import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig.USE_API
 import java.io.RandomAccessFile
 import kotlin.math.roundToInt
 
@@ -256,8 +257,14 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
                 contextFusionAnalyzer = ContextFusionAnalyzer(context, analysisScope)
 
                 // Step 2a: Perform standard LLM fusion
+
                 llmStartTime = System.currentTimeMillis()
-                llmFusionResult = contextFusionAnalyzer.performOpenAIFusion()
+                if(USE_API !=1){
+                    llmFusionResult = contextFusionAnalyzer.performFusion()
+                }else{
+                    llmFusionResult = contextFusionAnalyzer.performOpenAIFusion()
+                }
+
                 llmEndTime = System.currentTimeMillis()
 
                 // Step 2b: Perform Ollama fusion

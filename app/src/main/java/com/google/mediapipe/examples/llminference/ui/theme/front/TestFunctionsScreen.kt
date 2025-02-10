@@ -24,6 +24,7 @@ import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig
 
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.mediapipe.examples.llminference.ui.theme.ApiConfig
+import com.google.mediapipe.examples.llminference.ui.theme.cloudAI
 import com.google.mediapipe.examples.llminference.ui.theme.server.AIProvider
 import com.google.mediapipe.examples.llminference.ui.theme.server.UnifiedAIManager
 
@@ -53,10 +54,10 @@ class TestFunctionsViewModel : ViewModel() {
 //    private val openAIClient = UnifiedAIClient(defaultProvider = ApiConfig.LLM_model,
 //        anthropicKey = ApiConfig.LLM_API_KEY)
 
-    val manager = UnifiedAIManager(
-        geminiKey = ApiConfig.LLM_API_KEY,
-        defaultProvider = AIProvider.GEMINI
-    )
+//    val manager = UnifiedAIManager(
+//        geminiKey = ApiConfig.LLM_API_KEY,
+//        defaultProvider = AIProvider.GEMINI
+//    )
 
 
 
@@ -102,7 +103,7 @@ class TestFunctionsViewModel : ViewModel() {
 //    }
 
     fun testApiRequest() {
-        manager.easyCall(
+        cloudAI.easyCall(
             prompt = "what is your name?",
             scope = viewModelScope,
             onStart = {
