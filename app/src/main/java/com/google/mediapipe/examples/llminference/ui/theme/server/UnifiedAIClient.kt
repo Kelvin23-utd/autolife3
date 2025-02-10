@@ -46,14 +46,20 @@ data class OpenAIResponse(
 data class AnthropicRequest(
     val model: String,
     val max_tokens: Int,
-    val messages: List<Message>
+    val messages: List<Message>,
+    val temperature: Double? = null
 )
 
 @Serializable
-data class AnthropicChoice(
-    val message: Message,
-    val stop_reason: String,
-    val index: Int
+data class AnthropicContent(
+    val type: String,
+    val text: String
+)
+
+@Serializable
+data class AnthropicMessage(
+    val role: String,
+    val content: List<AnthropicContent>
 )
 
 @Serializable
@@ -61,17 +67,19 @@ data class AnthropicResponse(
     val id: String,
     val type: String,
     val role: String,
-    val content: List<Message>,
+    val content: List<AnthropicContent>,
     val model: String,
-    val stop_reason: String,
-    val usage: Usage
+    val stop_reason: String? = null,
+    val usage: Usage? = null
 )
 
 @Serializable
 data class Usage(
-    val prompt_tokens: Int,
-    val completion_tokens: Int,
-    val total_tokens: Int
+    val input_tokens: Int? = null,
+    val output_tokens: Int? = null,
+    val prompt_tokens: Int? = null,
+    val completion_tokens: Int? = null,
+    val total_tokens: Int? = null
 )
 
 enum class AIProvider {
@@ -134,7 +142,12 @@ class UnifiedAIClient(
         )
 
         val requestBody = json.encodeToString(request).toRequestBody(mediaType)
-        val response = makeApiCall(openAIConfig.baseUrl, requestBody, openAIKey!!, openAIConfig.authHeader)
+        val response = makeApiCall(
+            openAIConfig.baseUrl,
+            requestBody,
+            openAIKey ?: throw Exception("OpenAI API key not provided"),
+            openAIConfig.authHeader
+        )
         val parsedResponse = json.decodeFromString<OpenAIResponse>(response)
         return parsedResponse.choices.firstOrNull()?.message?.content
             ?: throw Exception("No response content")
@@ -144,19 +157,20 @@ class UnifiedAIClient(
         val request = AnthropicRequest(
             model = options.model ?: anthropicConfig.defaultModel,
             max_tokens = options.maxTokens,
-            messages = listOf(Message("user", prompt))
+            messages = listOf(Message("user", prompt)),
+            temperature = options.temperature
         )
 
         val requestBody = json.encodeToString(request).toRequestBody(mediaType)
         val response = makeApiCall(
             anthropicConfig.baseUrl,
             requestBody,
-            anthropicKey!!,
+            anthropicKey ?: throw Exception("Anthropic API key not provided"),
             anthropicConfig.authHeader,
             mapOf("anthropic-version" to "2023-06-01")
         )
         val parsedResponse = json.decodeFromString<AnthropicResponse>(response)
-        return parsedResponse.content.firstOrNull()?.content
+        return parsedResponse.content.firstOrNull()?.text
             ?: throw Exception("No response content")
     }
 
@@ -180,7 +194,8 @@ class UnifiedAIClient(
 
         client.newCall(requestBuilder.build()).execute().use { response ->
             if (!response.isSuccessful) {
-                throw Exception("API call failed with code: ${response.code}")
+                val errorBody = response.body?.string()
+                throw Exception("API call failed with code: ${response.code}, error: $errorBody")
             }
             return response.body?.string() ?: throw Exception("Empty response body")
         }

@@ -23,7 +23,7 @@ class SequentialMotionLocationAnalyzer(context: Context) : Closeable {
     private val contextRef = WeakReference(context)
     private val analyzerScope = CoroutineScope(Dispatchers.Main + Job())
     private var currentJob: Job? = null
-    private val llmInference: LlmInference by lazy { LlmManager.getInstance(context) }
+//    private val llmInference: LlmInference by lazy { LlmManager.getInstance(context) }
 
     private var isAnalyzing = false
     private var currentPhase = AnalysisPhase.NONE

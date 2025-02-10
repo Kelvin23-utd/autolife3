@@ -23,10 +23,11 @@ import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig
 
 
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.Dispatchers
+import com.google.mediapipe.examples.llminference.ui.theme.ApiConfig
+import com.google.mediapipe.examples.llminference.ui.theme.server.AIProvider
+import com.google.mediapipe.examples.llminference.ui.theme.server.UnifiedAIManager
 
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 // TestFunctionsViewModel.kt
 class TestFunctionsViewModel : ViewModel() {
@@ -49,7 +50,15 @@ class TestFunctionsViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
-    private val openAIClient = UnifiedAIClient("")
+//    private val openAIClient = UnifiedAIClient(defaultProvider = ApiConfig.LLM_model,
+//        anthropicKey = ApiConfig.LLM_API_KEY)
+
+    val manager = UnifiedAIManager(
+        geminiKey = ApiConfig.LLM_API_KEY,
+        defaultProvider = AIProvider.GEMINI
+    )
+
+
 
     private companion object {
         private const val TAG = "ApiRequestVM" // Adjust tag name as needed
@@ -93,8 +102,8 @@ class TestFunctionsViewModel : ViewModel() {
 //    }
 
     fun testApiRequest() {
-        openAIClient.easyCall(
-            prompt = "how was your busy day ? within 50 wrods",
+        manager.easyCall(
+            prompt = "what is your name?",
             scope = viewModelScope,
             onStart = {
                 _isLoading.value = true
@@ -111,6 +120,8 @@ class TestFunctionsViewModel : ViewModel() {
                 _isLoading.value = false
             }
         )
+
+
     }
 
 

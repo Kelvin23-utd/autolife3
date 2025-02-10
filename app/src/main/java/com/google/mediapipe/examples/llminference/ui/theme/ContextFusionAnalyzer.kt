@@ -4,6 +4,7 @@ import UnifiedAIClient
 import android.content.Context
 import android.util.Log
 import com.google.mediapipe.examples.llminference.server.OllamaClient
+import com.google.mediapipe.examples.llminference.ui.theme.ApiConfig
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -11,6 +12,8 @@ import java.io.Closeable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import com.google.mediapipe.examples.llminference.ui.theme.ModelConfig
+import com.google.mediapipe.examples.llminference.ui.theme.server.AIProvider
+import com.google.mediapipe.examples.llminference.ui.theme.server.UnifiedAIManager
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -28,7 +31,10 @@ class ContextFusionAnalyzer(
     private var motionStorage: MotionStorage? = null
     private var fileStorage: FileStorage? = null
 
-    private val unified = UnifiedAIClient("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")
+    val unified = UnifiedAIManager(
+        geminiKey = ApiConfig.LLM_API_KEY,
+        defaultProvider = AIProvider.GEMINI
+    )
 
     suspend fun performFusion(): String = withContext(Dispatchers.IO) {
         try {
