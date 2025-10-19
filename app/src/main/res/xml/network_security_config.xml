@@ -4,7 +4,6 @@
         <domain includeSubdomains="true">10.0.2.2</domain>
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
-        <domain includeSubdomains="true">10.176.195.9</domain>
-        <domain includeSubdomains="true">192.168.1.100</domain>
     </domain-config>
+    <!-- Add your development machine IP here if you expose a local server over HTTP. -->
 </network-security-config>

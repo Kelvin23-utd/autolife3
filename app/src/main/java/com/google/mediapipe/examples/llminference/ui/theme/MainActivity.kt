@@ -30,8 +30,8 @@ class MainViewModel : ViewModel() {
 
     // Initialize OllamaClient with your server's base URL
     private val ollamaClient = OllamaClient("http://localhost:11434")  // Use 10.0.2.2 for Android Emulator
-    // For physical device, use your computer's local IP address, e.g.:
-    // private val ollamaClient = OllamaClient("http://192.168.1.100:11434")
+    // For physical device, point to your computer's local IP address, e.g.:
+    // private val ollamaClient = OllamaClient("http://<your-machine-ip>:11434")
 
     fun sendMessage(message: String) {
         viewModelScope.launch {
